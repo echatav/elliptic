@@ -126,7 +126,7 @@ pointAdd curve (Point x1 y1) (Point x2 y2)
 
 pointMul :: Curve -> Integer -> Point -> Point
 pointMul _ _ Infinity = Infinity
-pointMul curve k pt@(Point x1 x2)
+pointMul curve k pt
  | k == 0 = Infinity
  | odd k  = pt .+ ((k-1) .* pt)
  | even k = let half = (k `div` 2) .* pt

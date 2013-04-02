@@ -155,7 +155,7 @@ type Message    = Integer
 type Signature  = (Integer , Integer)
 
 randomPrivateKey :: RandomGen rg => Curve -> rg -> (PrivateKey , rg)
-randomPrivateKey curve gen = randomR (1 , n-1) gen where n = nParameter curve
+randomPrivateKey curve = randomR (1 , n-1) where n = nParameter curve
 
 publicFromPrivate :: Curve -> PrivateKey -> PublicKey
 publicFromPrivate curve = (.* g) where g = gParameter curve; (.*) = pointMul curve

@@ -18,8 +18,7 @@ infinite :: Point -> Bool
 infinite Infinity = True
 infinite _        = False
 
---An elliptic curve is y^2 - x^3 - a*x^2 - b == 0 `mod` p
---with parameters: base point g of order n and cofactor h
+--An elliptic curve is y^2 - x^3 - a*x^2 - b == 0 `mod` p with parameters: base point g of order n and cofactor h
 data Curve = Curve {aParameter :: Integer,
                     bParameter :: Integer,
                     pParameter :: Integer,
@@ -115,7 +114,7 @@ pointAdd :: Curve -> Point -> Point -> Point
 pointAdd _ Infinity pt = pt
 pointAdd _ pt Infinity = pt
 pointAdd curve (Point x1 y1) (Point x2 y2)
- | (x1-x2) `mod` p == 0 && (y1+y2) `mod` p == 0 = Infinity -- case of additive inverses pt1 .+ pt2 == 0
+ | (x1-x2) `mod` p == 0 && (y1+y2) `mod` p == 0 = Infinity -- case of additive inverses pt1 .+ pt2 == Infinity
  | otherwise = let x3 = (m^2-x1-x2)    `mod` p
                    y3 = (m*(x1-x3)-y1) `mod` p
                in Point x3 y3

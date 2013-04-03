@@ -161,11 +161,9 @@ publicFromPrivate :: Curve -> PrivateKey -> PublicKey
 publicFromPrivate curve = (.* g) where g = gParameter curve; (.*) = pointMul curve
 
 sign :: RandomGen rg => Curve -> rg -> PrivateKey -> Message -> Signature
-sign curve gen d e = let g          = gParameter curve
-                         n          = nParameter curve
-                         (.*)       = pointMul curve
-                         (k , gen') = randomR (1 , n-1) gen
-                         Point x _  = k .* g
+sign curve gen d e = let n          = nParameter curve
+                         (k , gen') = randomPrivateKey curve gen
+                         Point x _  = publicFromPrivate curve k
                          r          = x `mod` n
                          s          = (inv k n) * (e + d*r) `mod` n
                      in if   r == 0 || s == 0

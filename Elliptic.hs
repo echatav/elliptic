@@ -27,7 +27,7 @@ data Curve = Curve {aParameter :: Integer,
                     hParameter :: Integer}
 
 --The Standards for Efficient Cryptography recommended elliptic curve domain parameters
-secp192k1, secp192r1, secp224k1, secp224r1, secp256k1, secp256r1, secp384r1, secp521r1::Curve
+secp192k1 , secp192r1 , secp224k1, secp224r1, secp256k1, secp256r1, secp384r1, secp521r1::Curve
 
 secp192k1 = Curve
  {aParameter = 0x0,

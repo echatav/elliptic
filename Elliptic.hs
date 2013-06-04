@@ -133,13 +133,12 @@ pt .+ Infinity = return pt
 
 --Scalar multiplication of a Point k .* pt
 (.*) :: Integer -> Point -> Reader Curve Point
-_ .* Infinity = return Infinity
-k .* pt
- | k == 0 = return Infinity
- | odd k  = do summand <- (k-1) .* pt
-               summand .+ pt
- | even k = do half <- (k `div` 2) .* pt
-               half .+ half
+_ .* Infinity    = return Infinity
+k .* pt | k == 0 = return Infinity
+        | odd k  = do summand <- (k-1) .* pt
+                      summand .+ pt
+        | even k = do half <- (k `div` 2) .* pt
+                      half .+ half
 
 --Linear combination (k1 .* pt1) .+ (k2 .* pt2) can be accomplished naively using addition and scalar multiplication but this is a speedier algorithm
 comb :: (Integer , Point) -> (Integer , Point) -> Reader Curve Point

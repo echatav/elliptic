@@ -150,7 +150,7 @@ comb :: (Integer , Point) -> (Integer , Point) -> Reader Curve Point
  | even k1 && odd  k2 = do summand <- (k1     , pt1) `comb` (k2 - 1 , pt2)
                            summand .+ pt2
  | odd  k1 && odd  k2 = do summand <- (k1 - 1 , pt1) `comb` (k2 - 1 , pt2)
-                           pt3 <- pt1 .+ pt2
+                           pt3     <- pt1 .+ pt2
                            summand .+ pt3
  | even k1 && even k2 = do half <- (k1 `div` 2 , pt1) `comb` (k2 `div` 2 , pt2)
                            half .+ half

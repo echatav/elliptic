@@ -2,6 +2,10 @@ module Elliptic where
 
 import System.Random (RandomGen , randomR)
 import Data.Ix (inRange)
+import Control.Applicative ((<$>) , empty)
+import Control.Monad.Reader
+import Control.Monad.State
+import Control.Monad.Trans.Maybe
 
 --The modular multiplicative inverse
 inv :: Integer -> Integer -> Integer
@@ -11,12 +15,12 @@ inv = xEuclid 1 0 0 1 where
        | otherwise = let (q , r) = u `divMod` v
                      in xEuclid x1 y1 (x0-q*x1) (y0-q*y1) v r
 
---A point on an elliptic curve either is a pair Point x y or is the point at Infinity
-data Point = Point Integer Integer | Infinity deriving Show
+--Data Structures and Operations on Elliptic Curves
 
-infinite :: Point -> Bool
-infinite Infinity = True
-infinite _        = False
+ --Data
+
+--A point on an elliptic curve either is a pair Point x y or is the point at Infinity
+data Point = Point Integer Integer | Infinity deriving (Show,Eq)
 
 --An elliptic curve is y^2 - x^3 - a*x^2 - b == 0 `mod` p with parameters: base point g of order n and cofactor h
 data Curve = Curve {aParameter :: Integer,
@@ -108,77 +112,114 @@ secp521r1 = Curve
                0x011839296A789A3BC0045C8A5FB42C7D1BD998F54449579B446817AFBD17273E662C97EE72995EF42640C550B9013FAD0761353C7086A272C24088BE94769FD16650,
   nParameter = 0x01FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFA51868783BF2F966B7FCC0148F709A5D03BB5C9B8899C47AEBB6FB71E91386409,
   hParameter = 0x1}
+                    
+ --Operations use the Reader monad to express their dependence on choice of Curve.
 
---Operations on points in an elliptic curve
-pointAdd :: Curve -> Point -> Point -> Point
-pointAdd _ Infinity pt = pt
-pointAdd _ pt Infinity = pt
-pointAdd curve (Point x1 y1) (Point x2 y2)
- | (x1-x2) `mod` p == 0 && (y1+y2) `mod` p == 0 = Infinity -- case of additive inverses pt1 .+ pt2 == Infinity
- | otherwise = let x3 = (m^2-x1-x2)    `mod` p
-                   y3 = (m*(x1-x3)-y1) `mod` p
-               in Point x3 y3
-   where p = pParameter curve
-         a = aParameter curve
-         m = if (x1-x2) `mod` p == 0 && (y1-y2) `mod` p == 0 -- case of pt1 == pt2
-             then (3*x1^2+a) * inv (2*y1) p -- slope of tangent at pt1 == pt2
-             else (y2-y1)  *  inv (x2-x1) p -- slope of secant for pt1 /= pt2
+--Addition of two Points pt1 .+ pt2
+(.+) :: Point -> Point -> Reader Curve Point
+Infinity .+ pt = return pt
+pt .+ Infinity = return pt
+(Point x1 y1) .+ (Point x2 y2)
+ = do p <- reader pParameter
+      if (x1-x2) `mod` p == 0 && (y1+y2) `mod` p == 0 -- case of additive inverses pt1 .+ pt2 == Infinity
+      then return Infinity
+      else do a <- reader aParameter
+              let m = if (x1-x2) `mod` p == 0 && (y1-y2) `mod` p == 0 -- case of pt1 == pt2
+                      then (3*x1^2+a) * inv (2*y1) p -- slope of tangent at pt1 == pt2
+                      else (y2-y1)  *  inv (x2-x1) p -- slope of secant for pt1 /= pt2
+                  x3 = (m^2-x1-x2)    `mod` p
+                  y3 = (m*(x1-x3)-y1) `mod` p
+              return (Point x3 y3)
 
-pointMul :: Curve -> Integer -> Point -> Point
-pointMul _ _ Infinity = Infinity
-pointMul curve k pt
- | k == 0 = Infinity
- | odd k  = pt .+ ((k-1) .* pt)
- | even k = let half = (k `div` 2) .* pt
-            in half .+ half
- where (.+) = pointAdd curve
-       (.*) = pointMul curve
+--Scalar multiplication of a Point k .* pt
+(.*) :: Integer -> Point -> Reader Curve Point
+_ .* Infinity = return Infinity
+k .* pt
+ | k == 0 = return Infinity
+ | odd k  = do summand <- (k-1) .* pt
+               summand .+ pt
+ | even k = do half <- (k `div` 2) .* pt
+               half .+ half
 
---Linear combination (k1 .* pt1) .+ (k2 .* pt2) can be accomplished naively using point addition and point multiplication but this is a speedier algorithm
-pointLinComb :: Curve -> (Integer , Point) -> (Integer , Point) -> Point
-pointLinComb curve (k1 , pt1) (k2 , pt2)
+--Linear combination (k1 .* pt1) .+ (k2 .* pt2) can be accomplished naively using addition and scalar multiplication but this is a speedier algorithm
+comb :: (Integer , Point) -> (Integer , Point) -> Reader Curve Point
+(k1 , pt1) `comb` (k2 , pt2)
  | k1 == 0            = k2 .* pt2
  | k2 == 0            = k1 .* pt1
- | even k1 && even k2 = let half = (k1 `div` 2 , pt1) `comb` (k2 `div` 2 , pt2)
-                        in half .+ half
- | even k1 && odd k2  = ((k1 , pt1) `comb` (k2 - 1 , pt2)) .+ pt2
- | odd k1 && even k2  = ((k1 - 1 , pt1) `comb` (k2 , pt2)) .+ pt1
- | odd k1 && odd k2   = ((k1 - 1 , pt1) `comb` (k2 - 1 , pt2)) .+ (pt1 .+ pt2)
- where (.+) = pointAdd curve
-       (.*) = pointMul curve
-       comb = pointLinComb curve
+ | odd  k1 && even k2 = do summand <- (k1 - 1 , pt1) `comb` (k2     , pt2)
+                           summand .+ pt1
+ | even k1 && odd  k2 = do summand <- (k1     , pt1) `comb` (k2 - 1 , pt2)
+                           summand .+ pt2
+ | odd  k1 && odd  k2 = do summand <- (k1 - 1 , pt1) `comb` (k2 - 1 , pt2)
+                           pt3 <- pt1 .+ pt2
+                           summand .+ pt3
+ | even k1 && even k2 = do half <- (k1 `div` 2 , pt1) `comb` (k2 `div` 2 , pt2)
+                           half .+ half
 
---Digital signature data structures and algorithms
+--Digital signature data structures and operations
 type PrivateKey = Integer
 type PublicKey  = Point
+type KeyPair    = (PrivateKey , PublicKey)
 type Message    = Integer
 type Signature  = (Integer , Integer)
 
-randomPrivateKey :: RandomGen rg => Curve -> rg -> (PrivateKey , rg)
-randomPrivateKey curve = randomR (1 , n-1) where n = nParameter curve
+--unprivate is the "one-way" function; it's also a homomorphism of Abelian groups!
+unprivate :: PrivateKey -> Reader Curve PublicKey
+unprivate private = reader gParameter >>= (.*) private
 
-publicFromPrivate :: Curve -> PrivateKey -> PublicKey
-publicFromPrivate curve = (.* g) where g = gParameter curve; (.*) = pointMul curve
+ --Operations use the monad transformer RandomGen rg => StateT rg to express their dependence on pseudorandomness
 
-sign :: RandomGen rg => Curve -> rg -> PrivateKey -> Message -> Signature
-sign curve gen d e = let n          = nParameter curve
-                         (k , gen') = randomPrivateKey curve gen
-                         Point x _  = publicFromPrivate curve k
-                         r          = x `mod` n
-                         s          = (inv k n) * (e + d*r) `mod` n
-                     in if   r == 0 || s == 0
-                        then sign curve gen' d e
-                        else (r , s)
+--Randomly generate a new PrivateKey
+newPrivateKey :: RandomGen rg => StateT rg (Reader Curve) PrivateKey
+newPrivateKey = do n <- lift (reader nParameter)
+                   state (randomR (1 , n-1))
 
-checkSig :: Curve -> PublicKey -> Message -> Signature -> Bool
-checkSig curve q e (r , s) = let g    = gParameter curve
-                                 n    = nParameter curve
-                                 comb = pointLinComb curve
-                                 w    = inv s n
-                                 u1   = e * w `mod` n
-                                 u2   = r * w `mod` n
-                                 pt   = (u1 , g) `comb` (u2 , q)
-                             in if infinite pt then False
-                                else let Point x _ = pt
-                                         v         = x `mod` n
-                                     in all (inRange (1 , n-1)) [r , s] && v == r
+--Randomly generate a new KeyPair
+newKeyPair :: RandomGen rg => StateT rg (Reader Curve) KeyPair
+newKeyPair = do private <- newPrivateKey
+                public  <- lift (unprivate private)
+                return (private , public)
+
+--Digitally sign a Message with a PrivateKey
+sign :: RandomGen rg => PrivateKey -> Message -> StateT rg (Reader Curve) Signature
+sign d e = do n         <- lift (reader nParameter)
+              k         <- newPrivateKey
+              Point x _ <- lift (unprivate k)
+              let r = x `mod` n
+                  s = (inv k n) * (e + d*r) `mod` n
+              if r == 0 || s == 0
+              then sign d e
+              else return (r , s)
+
+ --Operations using the monad transfomer MaybeT are composable validity checkers
+
+check :: (Functor m , Monad m) => Bool -> MaybeT m ()
+check True  = return ()
+check False = empty
+
+checkPublicKey :: PublicKey -> MaybeT (Reader Curve) ()
+checkPublicKey public = do p <- lift (reader pParameter)
+                           a <- lift (reader aParameter)
+                           b <- lift (reader bParameter)
+                           let Point x y = public
+                           check $ y^2 - x^3 - a*x^2 - b == 0 `mod` p
+
+checkKeyPair :: KeyPair -> MaybeT (Reader Curve) ()
+checkKeyPair (private , public) = do checkPublicKey public
+                                     pub <- lift (unprivate private)
+                                     check $ pub == public
+
+--Check validity of a Signature on a Message with a PublicKey
+checkSig :: PublicKey -> Message -> Signature -> MaybeT (Reader Curve) ()
+checkSig q e (r , s) = do checkPublicKey q
+                          n  <- lift (reader nParameter)
+                          check $ all (inRange (1 , n-1)) [r , s]
+                          let w  = inv s n
+                              u1 = e * w `mod` n
+                              u2 = r * w `mod` n
+                          g  <- lift (reader gParameter)
+                          pt <- lift ((u1 , g) `comb` (u2 , q))
+                          check $ pt /= Infinity
+                          let Point x _ = pt
+                              v         = x `mod` n
+                          check $ v == r

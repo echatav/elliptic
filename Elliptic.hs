@@ -198,11 +198,11 @@ check True  = return ()
 check False = empty
 
 checkPublicKey :: PublicKey -> MaybeT (Reader Curve) ()
-checkPublicKey public = do p <- lift (reader pParameter)
-                           a <- lift (reader aParameter)
-                           b <- lift (reader bParameter)
-                           let Point x y = public
-                           check $ y^2 - x^3 - a*x^2 - b == 0 `mod` p
+checkPublicKey Infinity    = return ()
+checkPublicKey Point x y   = do p <- lift (reader pParameter)
+                                a <- lift (reader aParameter)
+                                b <- lift (reader bParameter)
+                                check $ y^2 - x^3 - a*x^2 - b == 0 `mod` p
 
 checkKeyPair :: KeyPair -> MaybeT (Reader Curve) ()
 checkKeyPair (private , public) = do checkPublicKey public

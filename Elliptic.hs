@@ -135,7 +135,7 @@ pt .+ Infinity = return pt
 (.*) :: Integer -> Point -> Reader Curve Point
 _ .* Infinity    = return Infinity
 k .* pt | k == 0 = return Infinity
-        | odd k  = do summand <- (k-1) .* pt
+        | odd  k = do summand <- (k-1) .* pt
                       summand .+ pt
         | even k = do half <- (k `div` 2) .* pt
                       half .+ half

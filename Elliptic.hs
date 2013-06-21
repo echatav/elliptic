@@ -7,7 +7,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Trans.Maybe
 
---The modular multiplicative inverse
+--The modular multiplicative inverse via the extended Euclidean algorithm
 inv :: Integer -> Integer -> Integer
 inv = xEuclid 1 0 0 1 where
       xEuclid x0 y0 x1 y1 u v

@@ -131,29 +131,24 @@ pt .+ Infinity = return pt
                   y3 = (m*(x1-x3)-y1) `mod` p
               return (Point x3 y3)
 
+double :: Point -> Reader Curve Point
+double x = x .+ x
+
 --Scalar multiplication of a Point k .* pt
 (.*) :: Integer -> Point -> Reader Curve Point
-_ .* Infinity    = return Infinity
-k .* pt | k == 0 = return Infinity
-        | odd  k = do summand <- (k-1) .* pt
-                      summand .+ pt
-        | even k = do half <- (k `div` 2) .* pt
-                      half .+ half
+k .* pt | k == 0 || pt == Infinity = return Infinity
+        | odd  k                   = (k-1) .* pt       >>= (.+ pt)
+        | even k                   = (k `div` 2) .* pt >>= double
 
 --Linear combination (k1 .* pt1) .+ (k2 .* pt2) can be accomplished naively using addition and scalar multiplication but this is a speedier algorithm
 comb :: (Integer , Point) -> (Integer , Point) -> Reader Curve Point
 (k1 , pt1) `comb` (k2 , pt2)
- | k1 == 0            = k2 .* pt2
- | k2 == 0            = k1 .* pt1
- | odd  k1 && even k2 = do summand <- (k1 - 1 , pt1) `comb` (k2     , pt2)
-                           summand .+ pt1
- | even k1 && odd  k2 = do summand <- (k1     , pt1) `comb` (k2 - 1 , pt2)
-                           summand .+ pt2
- | odd  k1 && odd  k2 = do summand <- (k1 - 1 , pt1) `comb` (k2 - 1 , pt2)
-                           pt3     <- pt1 .+ pt2
-                           summand .+ pt3
- | even k1 && even k2 = do half <- (k1 `div` 2 , pt1) `comb` (k2 `div` 2 , pt2)
-                           half .+ half
+ | k1 == 0 || pt1 == Infinity = k2 .* pt2
+ | k2 == 0 || pt2 == Infinity = k1 .* pt1
+ | odd  k1 && even k2         = (k1-1 , pt1) `comb` (k2   , pt2) >>= (.+ pt1)
+ | even k1 && odd  k2         = (k1   , pt1) `comb` (k2-1 , pt2) >>= (.+ pt2)
+ | odd  k1 && odd  k2         = (k1-1 , pt1) `comb` (k2-1 , pt2) >>= (.+ pt1) >>= (.+ pt2)
+ | even k1 && even k2         = (k1 `div` 2 , pt1) `comb` (k2 `div` 2 , pt2)  >>= double
 
 --Digital signature data structures and operations
 type PrivateKey = Integer

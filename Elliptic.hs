@@ -132,7 +132,7 @@ pt .+ Infinity = return pt
               return (Point x3 y3)
 
 double :: Point -> Reader Curve Point
-double x = x .+ x
+double pt = pt .+ pt
 
 --Scalar multiplication of a Point k .* pt
 (.*) :: Integer -> Point -> Reader Curve Point

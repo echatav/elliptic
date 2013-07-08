@@ -143,8 +143,8 @@ k .* pt | k == 0 || pt == Infinity = return Infinity
 --Linear combination (k1 .* pt1) .+ (k2 .* pt2) can be accomplished naively using addition and scalar multiplication but this is a speedier algorithm
 comb :: (Integer , Point) -> (Integer , Point) -> Reader Curve Point
 (k1 , pt1) `comb` (k2 , pt2)
- | k1 == 0 || pt1 == Infinity = k2 .* pt2
- | k2 == 0 || pt2 == Infinity = k1 .* pt1
+ | k1 == 0 || pt1 == Infinity = k2 .* pt2
+ | k2 == 0 || pt2 == Infinity = k1 .* pt1
  | odd  k1 && even k2         = (k1-1 , pt1) `comb` (k2   , pt2) >>= (.+ pt1)
  | even k1 && odd  k2         = (k1   , pt1) `comb` (k2-1 , pt2) >>= (.+ pt2)
  | odd  k1 && odd  k2         = (k1-1 , pt1) `comb` (k2-1 , pt2) >>= (.+ pt1) >>= (.+ pt2)

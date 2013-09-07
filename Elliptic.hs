@@ -176,9 +176,8 @@ newKeyPair = do private <- newPrivateKey
 
 --Digitally sign a Message with a PrivateKey
 sign :: RandomGen rg => PrivateKey -> Message -> StateT rg (Reader Curve) Signature
-sign d e = do n         <- lift (reader nParameter)
-              k         <- newPrivateKey
-              Point x _ <- lift (unprivate k)
+sign d e = do n <- lift (reader nParameter)
+              (k , Point x _) <- newKeyPair
               let r = x `mod` n
                   s = (inv k n) * (e + d*r) `mod` n
               if r == 0 || s == 0

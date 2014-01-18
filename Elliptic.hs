@@ -159,7 +159,7 @@ type Signature  = (Integer , Integer)
 
 --unprivate is the "one-way" function; it's also a homomorphism of Abelian groups!
 unprivate :: PrivateKey -> Reader Curve PublicKey
-unprivate private = reader gParameter >>= (.*) private
+unprivate private = (private .*) =<< reader gParameter
 
  --Operations use the monad transformer RandomGen rg => StateT rg to express their dependence on pseudorandomness
 
@@ -192,10 +192,10 @@ check False = empty
 
 checkPublicKey :: PublicKey -> MaybeT (Reader Curve) ()
 checkPublicKey Infinity  = return ()
-checkPublicKey Point x y = do p <- lift (reader pParameter)
-                              a <- lift (reader aParameter)
-                              b <- lift (reader bParameter)
-                              check $ y^2 - x^3 - a*x^2 - b == 0 `mod` p
+checkPublicKey (Point x y) = do p <- lift (reader pParameter)
+                                a <- lift (reader aParameter)
+                                b <- lift (reader bParameter)
+                                check $ y^2 - x^3 - a*x^2 - b == 0 `mod` p
 
 checkKeyPair :: KeyPair -> MaybeT (Reader Curve) ()
 checkKeyPair (private , public) = do checkPublicKey public

@@ -22,7 +22,7 @@ inv = xEuclid 1 0 0 1 where
 --A point on an elliptic curve either is a pair Point x y or is the point at Infinity
 data Point = Point Integer Integer | Infinity deriving (Show,Eq)
 
---An elliptic curve is y^2 - x^3 - a*x^2 - b == 0 `mod` p with parameters: base point g of order n and cofactor h
+--An elliptic curve is (y^2 - x^3 - a*x^2 - b) `mod` p == 0 with parameters: base point g of order n and cofactor h
 data Curve = Curve {aParameter :: Integer,
                     bParameter :: Integer,
                     pParameter :: Integer,
@@ -134,21 +134,32 @@ pt .+ Infinity = return pt
 double :: Point -> Reader Curve Point
 double pt = pt .+ pt
 
+neg :: Point -> Reader Curve Point
+neg Infinity = return Infinity
+neg (Point x y) = do
+  p <- reader pParameter
+  return (Point x (p - y))
+
+comb :: [(Integer , Point)] -> Reader Curve Point
+comb = combPos <=< positives
+  where
+
+    positives = traverse $ \ (n , pt) ->
+      if n > 0 then return (n , pt) else do
+        let n' = negate n
+        pt' <- neg pt
+        return (n' , pt')
+
+    combPos [] = return Infinity
+    combPos xs = do
+      halved <- combPos [(n `div` 2 , pt) | (n , pt) <- xs , n > 1]
+      doubled <- double halved
+      andAdded <- foldM (.+) Infinity [pt | (n , pt) <- xs , odd n]
+      doubled .+ andAdded
+
 --Scalar multiplication of a Point k .* pt
 (.*) :: Integer -> Point -> Reader Curve Point
-k .* pt | k == 0 || pt == Infinity = return Infinity
-        | odd  k                   = (k-1) .* pt       >>= (.+ pt)
-        | even k                   = (k `div` 2) .* pt >>= double
-
---Linear combination (k1 .* pt1) .+ (k2 .* pt2) can be accomplished naively using addition and scalar multiplication but this is a speedier algorithm
-comb :: (Integer , Point) -> (Integer , Point) -> Reader Curve Point
-(k1 , pt1) `comb` (k2 , pt2)
- | k1 == 0 || pt1 == Infinity = k2 .* pt2
- | k2 == 0 || pt2 == Infinity = k1 .* pt1
- | odd  k1 && even k2         = (k1-1 , pt1) `comb` (k2   , pt2) >>= (.+ pt1)
- | even k1 && odd  k2         = (k1   , pt1) `comb` (k2-1 , pt2) >>= (.+ pt2)
- | odd  k1 && odd  k2         = (k1-1 , pt1) `comb` (k2-1 , pt2) >>= (.+ pt1) >>= (.+ pt2)
- | even k1 && even k2         = (k1 `div` 2 , pt1) `comb` (k2 `div` 2 , pt2)  >>= double
+k .* pt = comb [(k , pt)]
 
 --Digital signature data structures and operations
 type PrivateKey = Integer
@@ -177,12 +188,15 @@ newKeyPair = do private <- newPrivateKey
 --Digitally sign a Message with a PrivateKey
 sign :: RandomGen rg => PrivateKey -> Message -> StateT rg (Reader Curve) Signature
 sign d e = do n <- lift (reader nParameter)
-              (k , Point x _) <- newKeyPair
-              let r = x `mod` n
-                  s = (inv k n) * (e + d*r) `mod` n
-              if r == 0 || s == 0
-              then sign d e
-              else return (r , s)
+              (k , pt) <- newKeyPair
+              case pt of
+                Infinity -> sign d e
+                (Point x y) -> do
+                  let r = x `mod` n
+                      s = (inv k n * (e + d*r)) `mod` n
+                  if r == 0 || s == 0
+                  then sign d e
+                  else return (r , s)
 
  --Operations using the monad transfomer MaybeT are composable validity checkers
 
@@ -195,7 +209,7 @@ checkPublicKey Infinity  = return ()
 checkPublicKey (Point x y) = do p <- lift (reader pParameter)
                                 a <- lift (reader aParameter)
                                 b <- lift (reader bParameter)
-                                check $ y^2 - x^3 - a*x^2 - b == 0 `mod` p
+                                check $ (y^2 - x^3 - a*x^2 - b) `mod` p  == 0
 
 checkKeyPair :: KeyPair -> MaybeT (Reader Curve) ()
 checkKeyPair (private , public) = do checkPublicKey public
@@ -208,10 +222,10 @@ checkSig q e (r , s) = do checkPublicKey q
                           n  <- lift (reader nParameter)
                           check $ all (inRange (1 , n-1)) [r , s]
                           let w  = inv s n
-                              u1 = e * w `mod` n
-                              u2 = r * w `mod` n
+                              u1 = (e * w) `mod` n
+                              u2 = (r * w) `mod` n
                           g  <- lift (reader gParameter)
-                          pt <- lift ((u1 , g) `comb` (u2 , q))
+                          pt <- lift (comb [(u1 , g) , (u2 , q)])
                           check $ pt /= Infinity
                           let Point x _ = pt
                               v         = x `mod` n

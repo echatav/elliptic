@@ -140,12 +140,15 @@ neg (Point x y) = do
   p <- reader pParameter
   return (Point x (p - y))
 
+-- Linear combination, algorithm uses double-and-add method
+-- comb [(n1 , pt1),..,(nk , ptk)] = n1 .* pt1 .+ .. .+ nk .* ptk
+-- O(log(n1 + .. + nk)) complexity
 comb :: [(Integer , Point)] -> Reader Curve Point
 comb = combPos <=< positives
   where
 
     positives = traverse $ \ (n , pt) ->
-      if n > 0 then return (n , pt) else do
+      if n >= 0 then return (n , pt) else do
         let n' = negate n
         pt' <- neg pt
         return (n' , pt')

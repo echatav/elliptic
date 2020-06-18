@@ -233,3 +233,17 @@ checkSig q e (r , s) = do checkPublicKey q
                           let Point x _ = pt
                               v         = x `mod` n
                           check $ v == r
+
+checkCurve :: Curve -> Bool
+checkCurve = boolMay . runReader (runMaybeT checkCurveProperties)
+  where
+
+    checkCurveProperties = do
+      g <- reader gParameter
+      checkPublicKey g
+      n <- reader nParameter
+      inf <- lift $ n .* g
+      check $ inf == Infinity
+
+    boolMay (Just ()) = True
+    boolMay Nothing = False

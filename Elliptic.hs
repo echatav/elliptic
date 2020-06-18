@@ -8,6 +8,7 @@ import Control.Monad.State
 import Control.Monad.Trans.Maybe
 
 --The modular multiplicative inverse via the extended Euclidean algorithm
+--When p is prime, then (x * inv x p) `mod` p == 1
 inv :: Integer -> Integer -> Integer
 inv = xEuclid 1 0 0 1 where
       xEuclid x0 y0 x1 y1 u v
@@ -134,15 +135,16 @@ pt .+ Infinity = return pt
 double :: Point -> Reader Curve Point
 double pt = pt .+ pt
 
+--Point negation reflects across the x-axis
 neg :: Point -> Reader Curve Point
 neg Infinity = return Infinity
 neg (Point x y) = do
   p <- reader pParameter
   return (Point x (p - y))
 
--- Linear combination, algorithm uses double-and-add method
--- comb [(n1 , pt1),..,(nk , ptk)] = n1 .* pt1 .+ .. .+ nk .* ptk
--- O(log(n1 + .. + nk)) complexity
+--Linear combination, algorithm uses double-and-add method
+--comb [(n1 , pt1),..,(nk , ptk)] == n1 .* pt1 .+ .. .+ nk .* ptk
+--O(log(n1 + .. + nk)) complexity
 comb :: [(Integer , Point)] -> Reader Curve Point
 comb = combPos <=< positives
   where
@@ -207,12 +209,26 @@ check :: (Functor m , Monad m) => Bool -> MaybeT m ()
 check True  = return ()
 check False = empty
 
+validate :: Maybe () -> Bool
+validate Nothing   = True
+validate (Just ()) = False
+
 checkPublicKey :: PublicKey -> MaybeT (Reader Curve) ()
 checkPublicKey Infinity  = return ()
 checkPublicKey (Point x y) = do p <- lift (reader pParameter)
                                 a <- lift (reader aParameter)
                                 b <- lift (reader bParameter)
                                 check $ (y^2 - x^3 - a*x^2 - b) `mod` p  == 0
+
+validateCurve :: Curve -> Bool
+validateCurve = validate . runReader (runMaybeT checkCurveProperties)
+  where
+    checkCurveProperties = do
+      g <- reader gParameter
+      checkPublicKey g
+      n <- reader nParameter
+      inf <- lift $ n .* g
+      check $ inf == Infinity
 
 checkKeyPair :: KeyPair -> MaybeT (Reader Curve) ()
 checkKeyPair (private , public) = do checkPublicKey public
@@ -233,17 +249,3 @@ checkSig q e (r , s) = do checkPublicKey q
                           let Point x _ = pt
                               v         = x `mod` n
                           check $ v == r
-
-checkCurve :: Curve -> Bool
-checkCurve = boolMay . runReader (runMaybeT checkCurveProperties)
-  where
-
-    checkCurveProperties = do
-      g <- reader gParameter
-      checkPublicKey g
-      n <- reader nParameter
-      inf <- lift $ n .* g
-      check $ inf == Infinity
-
-    boolMay (Just ()) = True
-    boolMay Nothing = False
